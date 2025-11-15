@@ -11,6 +11,7 @@ import org.onosproject.net.device.DeviceService;
 import org.onosproject.net.Device;
 import org.onosproject.net.flow.FlowEntry;
 import org.onosproject.net.flow.FlowRuleService;
+import org.onosproject.net.flow.criteria.*;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -18,6 +19,13 @@ import org.slf4j.LoggerFactory;
 import javax.ws.rs.client.*;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
+
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.io.InputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
 
 import java.util.*;
 import java.util.concurrent.*;
@@ -86,6 +94,8 @@ public class IdsMonitor {
 
                 for (FlowEntry fe : flows) {
                     Map<String, Object> json = buildFlowJson(device, fe);
+                    //log.info("JSON data that is sent: {}", json.toString());
+                    log.info("Criteria for flow {}: {}", fe.id().value(), fe.selector().criteria());
 
                     // Send request
                     String prediction = sendToIds(json);
@@ -108,20 +118,82 @@ public class IdsMonitor {
     private Map<String, Object> buildFlowJson(Device device, FlowEntry fe) {
         Map<String, Object> m = new HashMap<>();
 
-        m.put("device_id", device.id().toString());
+        // Core flow stats
+        long packets = fe.packets();
+        long bytes   = fe.bytes();
+        double dur   = fe.life() > 0 ? fe.life() : 1.0;
+
         m.put("flow_id", fe.id().value());
-        m.put("packet_count", fe.packets());
-        m.put("byte_count", fe.bytes());
-        m.put("duration_sec", fe.life());
+        m.put("device_id", device.id().toString());
+        m.put("packet_count", packets);
+        m.put("byte_count", bytes);
+        m.put("duration_sec", dur);
+        m.put("packets_per_sec", packets / dur);
+        m.put("bytes_per_sec", bytes / dur);
         m.put("last_seen", fe.lastSeen());
 
-        // Extract basic match fields
-        fe.selector().criteria().forEach(c -> {
-            m.put(c.type().name().toLowerCase(), c.toString());
-        });
+        // Defaults
+        m.put("src_ip", null);
+        m.put("dst_ip", null);
+        m.put("src_port", null);
+        m.put("dst_port", null);
+        m.put("protocol", null);
+        m.put("eth_src", null);
+        m.put("eth_dst", null);
+        m.put("in_port", null);
+
+        // Extract criteria
+        for (Criterion c : fe.selector().criteria()) {
+            switch (c.type()) {
+
+                case ETH_SRC:
+                    m.put("eth_src", ((EthCriterion) c).mac().toString());
+                    break;
+
+                case ETH_DST:
+                    m.put("eth_dst", ((EthCriterion) c).mac().toString());
+                    break;
+
+                case IN_PORT:
+                    m.put("in_port", ((PortCriterion) c).port().toLong());
+                    break;
+
+                case IPV4_SRC:
+                    m.put("src_ip", ((IPCriterion) c).ip().address().toString());
+                    break;
+
+                case IPV4_DST:
+                    m.put("dst_ip", ((IPCriterion) c).ip().address().toString());
+                    break;
+
+                case TCP_SRC:
+                    m.put("src_port", ((TcpPortCriterion) c).tcpPort().toInt());
+                    break;
+
+                case TCP_DST:
+                    m.put("dst_port", ((TcpPortCriterion) c).tcpPort().toInt());
+                    break;
+
+                case UDP_SRC:
+                    m.put("src_port", ((UdpPortCriterion) c).udpPort().toInt());
+                    break;
+
+                case UDP_DST:
+                    m.put("dst_port", ((UdpPortCriterion) c).udpPort().toInt());
+                    break;
+
+                case IP_PROTO:
+                    m.put("protocol", ((IPProtocolCriterion) c).protocol());
+                    break;
+
+                default:
+                    break;
+            }
+        }
 
         return m;
     }
+
 
     /**
      * Sends flow JSON to external IDS server.
@@ -129,17 +201,45 @@ public class IdsMonitor {
     private String sendToIds(Map<String, Object> json) {
         try {
             String jsonStr = mapper.writeValueAsString(json);
+            log.info("Actual JSON string: {}", jsonStr);
 
-            WebTarget target = client.target(IDS_API_URL);
-            Response response = target.request(MediaType.APPLICATION_JSON)
-                    .post(Entity.json(jsonStr));
+            byte[] postData = jsonStr.getBytes("UTF-8");
 
-            if (response.getStatus() != 200) {
-                log.warn("IDS server returned status {}", response.getStatus());
+            URL url = new URL(IDS_API_URL);
+            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+
+            conn.setRequestMethod("POST");
+            conn.setDoOutput(true);
+            conn.setConnectTimeout(5000);
+            conn.setReadTimeout(5000);
+            conn.setRequestProperty("Content-Type", "application/json");
+            conn.setRequestProperty("Accept", "application/json");
+
+            // Send JSON
+            try (OutputStream os = conn.getOutputStream()) {
+                os.write(postData);
+                os.flush();
+            }
+
+            int status = conn.getResponseCode();
+            if (status != HttpURLConnection.HTTP_OK) {
+                log.warn("IDS server returned HTTP {}", status);
                 return null;
             }
 
-            Map result = response.readEntity(Map.class);
+            // Read response
+            StringBuilder response = new StringBuilder();
+            try (InputStream is = conn.getInputStream();
+                BufferedReader br = new BufferedReader(new InputStreamReader(is))) {
+
+                String line;
+                while ((line = br.readLine()) != null) {
+                    response.append(line);
+                }
+            }
+
+            // Parse JSON
+            Map result = mapper.readValue(response.toString(), Map.class);
             return (String) result.get("label");
 
         } catch (Exception e) {
@@ -147,6 +247,7 @@ public class IdsMonitor {
             return null;
         }
     }
+
 
     /**
      * Exposed to the CLI: returns last predictions.
