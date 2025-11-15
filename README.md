@@ -53,3 +53,91 @@ The IDS REST API is implemented using **FastAPI**.
 ONOS will send flow statistics to this endpoint for classification.
 
 ---
+
+Here is a clean, concise section you can paste directly into your README.
+
+---
+
+## ONOS IDS Application
+
+This project includes a custom **ONOS application** that periodically collects flow statistics from all switches in the SDN network and forwards these flow features to the external REST API for classification.
+
+### How It Works
+
+* The app is implemented in Java and packaged as an OAR bundle.
+* Every *N* seconds, it:
+
+  1. Retrieves all **FlowEntry** objects from the ONOS `FlowRuleService`.
+  2. Extracts relevant flow statistics:
+
+     * Packet count
+     * Byte count
+     * Duration
+     * Match criteria (IP addresses, ports, protocol, etc.)
+  3. Converts each flow entry into JSON.
+  4. Sends this JSON via HTTP POST to the REST API endpoint:
+
+     ```
+     http://localhost:5000/predict
+     ```
+  5. Receives a classification label (e.g., `"benign"` or `"malicious"`).
+  6. Logs the result and makes it available through an ONOS CLI command:
+
+     ```
+     ids-stats
+     ```
+
+This keeps the ONOS controller lightweight: all ML processing is done externally, and ONOS only performs data extraction and response handling.
+
+---
+
+### Installing the App into ONOS
+
+Build the application as an OAR file and install it into your ONOS Docker container as follows:
+
+1. **Build the application with Bazel:**
+
+   ```bash
+   cd onos/
+   bazel build //apps/ids:onos-apps-ids-oar --extra_toolchains=@rules_python//python:autodetecting_toolchain_nonstrict
+   ```
+
+2. **Copy the OAR file into the ONOS container:**
+
+   ```bash
+   docker cp onos/bazel-bin/apps/ids/onos-apps-ids-oar.oar onos:/root/onos/apps
+   ```
+
+3. **Enter the container:**
+
+   ```bash
+   docker exec -it onos /bin/bash
+   ```
+
+4. **Install the application:**
+
+   ```bash
+   bin/onos-app localhost install apps/onos-apps-ids-oar.oar
+   ```
+
+5. **Open the ONOS CLI:**
+
+   ```bash
+   bin/onos -l onos
+   ```
+
+6. **Activate the IDS application:**
+
+   ```bash
+   app activate ids
+   ```
+
+7. (Optional) **View last predictions** using the custom CLI command:
+
+   ```bash
+   ids-stats
+   ```
+
+Once activated, the ONOS controller will automatically begin sending flow statistics to the REST API for real-time intrusion detection.
+
+

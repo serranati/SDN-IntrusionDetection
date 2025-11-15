@@ -7,8 +7,8 @@ import org.apache.karaf.shell.api.action.lifecycle.Service;
 import org.onosproject.cli.AbstractShellCommand;
 
 @Service
-@Command(scope = "onos", name = "sbm-macs",
-        description = "Displays MAC addresses learned by the Southbound MAC Monitor")
+@Command(scope = "onos", name = "ids-stats",
+        description = "Displays the latest statistics regarding ML-based intrustion detection.")
 public class IdsCliCommand extends AbstractShellCommand {
 
     @Override
