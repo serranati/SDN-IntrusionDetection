@@ -16,8 +16,8 @@ The REST API will integrate a trained ML model for detecting attacks such as DDo
 │   └── server.py           # FastAPI REST server receiving flow data from ONOS
 │
 └── onos/                   # ONOS application source code
-├── app/                # Java ONOS app logic
-└── ...                 # Other ONOS project files
+│   └── apps/ids            # Java code for the IDS ONOS application
+│   └── ...                 # Other ONOS project files
 
 ```
 
@@ -54,10 +54,6 @@ ONOS will send flow statistics to this endpoint for classification.
 
 ---
 
-Here is a clean, concise section you can paste directly into your README.
-
----
-
 ## ONOS IDS Application
 
 This project includes a custom **ONOS application** that periodically collects flow statistics from all switches in the SDN network and forwards these flow features to the external REST API for classification.
@@ -69,11 +65,18 @@ This project includes a custom **ONOS application** that periodically collects f
 
   1. Retrieves all **FlowEntry** objects from the ONOS `FlowRuleService`.
   2. Extracts relevant flow statistics:
-
+     * Flow id
+     * Device id
      * Packet count
      * Byte count
      * Duration
-     * Match criteria (IP addresses, ports, protocol, etc.)
+     * Packets per second
+     * Bytes per second
+     * Last seen
+     * IP addresses (source + destination)
+     * TCP/UDP ports (source + destination)
+     * IP protocol
+     * MAC addresses (source + destination)
   3. Converts each flow entry into JSON.
   4. Sends this JSON via HTTP POST to the REST API endpoint:
 
@@ -139,5 +142,3 @@ Build the application as an OAR file and install it into your ONOS Docker contai
    ```
 
 Once activated, the ONOS controller will automatically begin sending flow statistics to the REST API for real-time intrusion detection.
-
-
