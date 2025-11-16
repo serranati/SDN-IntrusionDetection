@@ -1,7 +1,6 @@
 package org.onosproject.ids;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-//import org.apache.felix.scr.annotations.*;
 import org.osgi.service.component.annotations.*;
 import org.onlab.util.Tools;
 import org.onosproject.core.ApplicationId;
@@ -29,6 +28,7 @@ import java.net.URL;
 
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * IDS application that periodically fetches ONOS flow statistics
@@ -55,7 +55,13 @@ public class IdsMonitor {
     private static final String IDS_API_URL = "http://localhost:5000/predict";
 
     private final ObjectMapper mapper = new ObjectMapper();
-    private final Map<String, String> lastPredictions = new ConcurrentHashMap<>();
+
+    // Unique ID generator for attack alerts
+    private final AtomicLong attackIdGen = new AtomicLong(1);
+
+    // Store attack records: ID → AttackRecord
+    private final ConcurrentHashMap<Long, AttackRecord> attackRecords = new ConcurrentHashMap<>();
+    //private final Map<String, String> lastPredictions = new ConcurrentHashMap<>();
 
     private Client client;
 
@@ -85,6 +91,18 @@ public class IdsMonitor {
     }
 
     /**
+     * Make the attack records available to the CLI
+     */
+    public Map<Long, AttackRecord> getAttackRecords() {
+        return Collections.unmodifiableMap(attackRecords);
+    }
+
+    public AttackRecord getAttackRecord(long id) {
+        return attackRecords.get(id);
+    }
+
+
+    /**
      * Polls all flow entries and sends each to the IDS server.
      */
     private void pollFlowsAndSend() {
@@ -98,12 +116,21 @@ public class IdsMonitor {
                     log.info("Criteria for flow {}: {}", fe.id().value(), fe.selector().criteria());
 
                     // Send request
-                    String prediction = sendToIds(json);
+                    String label = sendToIds(json);
 
-                    if (prediction != null) {
-                        String key = device.id().toString() + ":" + fe.id().value();
-                        lastPredictions.put(key, prediction);
-                        log.info("IDS result for {} -> {}", key, prediction);
+                    // if (prediction != null) {
+                    //     String key = device.id().toString() + ":" + fe.id().value();
+                    //     lastPredictions.put(key, prediction);
+                    //     log.info("IDS result for {} -> {}", key, prediction);
+                    // }
+
+                    if (label == null) continue;
+
+                    if (label.equalsIgnoreCase("malicious")) {
+                        long id = attackIdGen.getAndIncrement();
+                        AttackRecord rec = new AttackRecord(id, System.currentTimeMillis(), label, json);
+                        attackRecords.put(id, rec);
+                        log.warn("IDS ALERT [{}] => {}", id, json);
                     }
                 }
             }
@@ -130,7 +157,7 @@ public class IdsMonitor {
         m.put("duration_sec", dur);
         m.put("packets_per_sec", packets / dur);
         m.put("bytes_per_sec", bytes / dur);
-        m.put("last_seen", fe.lastSeen());
+        m.put("last_seen", IdsCliCommands.fmt(fe.lastSeen()));
 
         // Defaults
         m.put("src_ip", null);
@@ -145,7 +172,6 @@ public class IdsMonitor {
         // Extract criteria
         for (Criterion c : fe.selector().criteria()) {
             switch (c.type()) {
-
                 case ETH_SRC:
                     m.put("eth_src", ((EthCriterion) c).mac().toString());
                     break;
@@ -252,7 +278,7 @@ public class IdsMonitor {
     /**
      * Exposed to the CLI: returns last predictions.
      */
-    public Map<String, String> getLastPredictions() {
-        return lastPredictions;
-    }
+    // public Map<String, String> getLastPredictions() {
+    //     return lastPredictions;
+    // }
 }

@@ -21,18 +21,18 @@ The REST API will integrate a trained ML model for detecting attacks such as DDo
 ```
 
 ---
-## 📊 INS-DN Dataset (2020)
+## 📊 InSDN Dataset (2020)
 
-This project uses the **INS-DN (Intrusion Detection for Software-Defined Networks) Dataset**, published in *IEEE Access (2020)* as part of the paper:
+This project uses the **InSDN (Intrusion Detection for Software-Defined Networks) Dataset**, published in *IEEE Access (2020)* as part of the paper:
 
-> **“INS-DN: Intrusion Detection System Using Deep Learning for Software Defined Networks”**
+> **“InSDN: Intrusion Detection System Using Deep Learning for Software Defined Networks”**
 > Muhammad Umar Javaid et al., IEEE Access, 2020.
 > [https://ieeexplore.ieee.org/document/9187858](https://ieeexplore.ieee.org/document/9187858)
 
 The dataset is available on Kaggle:
 [https://www.kaggle.com/datasets/muhammadumarjavaid/insdn-dataset-2020](https://www.kaggle.com/datasets/muhammadumarjavaid/insdn-dataset-2020)
 
-INS-DN is a **flow-based intrusion detection dataset designed specifically for SDN environments**, containing labeled traffic for various attack types (e.g., DoS, DDoS, probing, botnet traffic) as well as benign flows. Each flow record contains a rich set of statistical features (packet counts, byte counts, durations, IP/port information, protocol metadata, and aggregated flow-level metrics).
+InSDN is a **flow-based intrusion detection dataset designed specifically for SDN environments**, containing labeled traffic for various attack types (e.g., DoS, DDoS, probing, botnet traffic) as well as benign flows. Each flow record contains a rich set of statistical features (packet counts, byte counts, durations, IP/port information, protocol metadata, and aggregated flow-level metrics).
 
 ---
 
@@ -97,11 +97,7 @@ This project includes a custom **ONOS application** that periodically collects f
      http://localhost:5000/predict
      ```
   5. Receives a classification label (e.g., `"benign"` or `"malicious"`).
-  6. Logs the result and makes it available through an ONOS CLI command:
-
-     ```
-     ids-stats
-     ```
+  6. Presents the results to the user with ONOS CLI commands, namely `ids-detections` and `ids-attack-info`.
 
 This keeps the ONOS controller lightweight: all ML processing is done externally, and ONOS only performs data extraction and response handling.
 
