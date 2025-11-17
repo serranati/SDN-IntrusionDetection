@@ -144,10 +144,4 @@ Build the application as an OAR file and install it into your ONOS Docker contai
    app activate ids
    ```
 
-7. (Optional) **View last predictions** using the custom CLI command:
-
-   ```bash
-   ids-stats
-   ```
-
 Once activated, the ONOS controller will automatically begin sending flow statistics to the REST API for real-time intrusion detection.

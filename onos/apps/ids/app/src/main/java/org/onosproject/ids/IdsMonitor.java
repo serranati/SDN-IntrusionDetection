@@ -61,7 +61,9 @@ public class IdsMonitor {
 
     // Store attack records: ID → AttackRecord
     private final ConcurrentHashMap<Long, AttackRecord> attackRecords = new ConcurrentHashMap<>();
-    //private final Map<String, String> lastPredictions = new ConcurrentHashMap<>();
+    
+    // make sure not to assign two different attack ids to the same flow 
+    private final ConcurrentHashMap<Long, Boolean> alertedFlows = new ConcurrentHashMap<>();
 
     private Client client;
 
@@ -113,24 +115,31 @@ public class IdsMonitor {
                 for (FlowEntry fe : flows) {
                     Map<String, Object> json = buildFlowJson(device, fe);
                     //log.info("JSON data that is sent: {}", json.toString());
-                    log.info("Criteria for flow {}: {}", fe.id().value(), fe.selector().criteria());
+                    //log.info("Criteria for flow {}: {}", fe.id().value(), fe.selector().criteria());
+
+                    if (json.get("src_ip") != null || json.get("eth_src") != null){
+                        log.info("JSON data that is sent: {}", json.toString());
+                    }
+
+                    long flowRuleId = fe.id().value();
 
                     // Send request
                     String label = sendToIds(json);
 
-                    // if (prediction != null) {
-                    //     String key = device.id().toString() + ":" + fe.id().value();
-                    //     lastPredictions.put(key, prediction);
-                    //     log.info("IDS result for {} -> {}", key, prediction);
-                    // }
-
                     if (label == null) continue;
 
-                    if (label.equalsIgnoreCase("malicious")) {
-                        long id = attackIdGen.getAndIncrement();
-                        AttackRecord rec = new AttackRecord(id, System.currentTimeMillis(), label, json);
-                        attackRecords.put(id, rec);
-                        log.warn("IDS ALERT [{}] => {}", id, json);
+                    if (!label.equalsIgnoreCase("normal")) {
+                            if(!alertedFlows.containsKey(flowRuleId)) {
+                            long id = attackIdGen.getAndIncrement();
+                            AttackRecord rec = new AttackRecord(id, System.currentTimeMillis(), label, json);
+                            attackRecords.put(id, rec);
+                            alertedFlows.put(flowRuleId, true); // Mark this flow as alerted
+                            log.warn("IDS ALERT [{}] => {}", id, json);
+                        }
+                        else {
+                            // Flow is still malicious, but we skip creating a new alert to avoid duplication
+                            log.info("Flow ID {} remains malicious. Skipping new alert creation.", flowRuleId);
+                        }
                     }
                 }
             }
@@ -155,8 +164,8 @@ public class IdsMonitor {
         m.put("packet_count", packets);
         m.put("byte_count", bytes);
         m.put("duration_sec", dur);
-        m.put("packets_per_sec", packets / dur);
-        m.put("bytes_per_sec", bytes / dur);
+        m.put("packets_per_sec", (Double) packets / dur);
+        m.put("bytes_per_sec", (Double) bytes / dur);
         m.put("last_seen", IdsCliCommands.fmt(fe.lastSeen()));
 
         // Defaults
@@ -227,7 +236,7 @@ public class IdsMonitor {
     private String sendToIds(Map<String, Object> json) {
         try {
             String jsonStr = mapper.writeValueAsString(json);
-            log.info("Actual JSON string: {}", jsonStr);
+            //log.info("Actual JSON string: {}", jsonStr);
 
             byte[] postData = jsonStr.getBytes("UTF-8");
 

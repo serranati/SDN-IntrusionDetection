@@ -70,16 +70,23 @@ def predict_flow(flow: Flow):
     X_raw = pd.DataFrame([row])[numeric_cols].astype(float)
 
     # 3. Scale
-    X_scaled = scaler.transform(X_raw)
+    # scaler.transform returns a numpy array, which causes the UserWarning
+    X_scaled_array = scaler.transform(X_raw)
+
+    # Convert back to DataFrame to preserve feature names and silence the warning
+    # The columns are guaranteed to be in the correct order because X_raw already was.
+    X_scaled_df = pd.DataFrame(X_scaled_array, columns=numeric_cols)
 
     # 4. Predict
-    y_pred = rf.predict(X_scaled)
+    y_pred = rf.predict(X_scaled_df)
     label = label_enc.inverse_transform(y_pred.astype(int))[0]
+
+    print("Label: ", label)
 
     # 5. Optional: probability / confidence
     confidence = None
     if hasattr(rf, "predict_proba"):
-        proba_vec = rf.predict_proba(X_scaled)[0]
+        proba_vec = rf.predict_proba(X_scaled_df)[0]
         confidence = float(np.max(proba_vec))
 
     # 6. Decide if this label means attack
